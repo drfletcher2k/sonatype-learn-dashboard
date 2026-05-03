@@ -34,8 +34,6 @@ REPORT_ID     = "619bf79c-970a-4a8e-be8a-dde48a05c652"
 MIGRATION_DATE  = "2024-05-12"   # Platform go-live / bulk-enrollment date
 INTERNAL_DOMAIN = "sonatype.com" # Email domain for internal Sonatype users
 
-NETLIFY_TOKEN   = "nfp_Z7jafWi1EMiNuz7Lf8uny6vvLy1UEvWDbef7"
-NETLIFY_SITE_ID = "fa68b436-e928-4ec2-abb5-eb6c689726a1"
 
 # Consumer/free email domains — not treated as companies in leaderboards
 CONSUMER_DOMAINS = {
@@ -798,30 +796,33 @@ html[data-iframe] .landing{ min-height: 0 !important; height: auto !important; }
     print(f"  ✓ HTML updated: {html_path}")
 
 
-# ── NETLIFY DEPLOY ────────────────────────────────────────────────────────────
+# ── GITHUB PAGES DEPLOY ───────────────────────────────────────────────────────
 
-def deploy_to_netlify(html_path):
-    """Zip the dashboard HTML as index.html and push to Netlify."""
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.write(html_path, arcname="index.html")
-        # Explicit content-type header so Netlify serves as text/html, not text/plain
-        zf.writestr("_headers", "/index.html\n  Content-Type: text/html; charset=utf-8\n")
-    buf.seek(0)
-    r = requests.post(
-        f"https://api.netlify.com/api/v1/sites/{NETLIFY_SITE_ID}/deploys",
-        headers={
-            "Authorization": f"Bearer {NETLIFY_TOKEN}",
-            "Content-Type":  "application/zip",
-        },
-        data=buf.read(),
-        timeout=60,
-    )
-    if r.status_code in (200, 201):
-        url = r.json().get("deploy_ssl_url") or r.json().get("ssl_url", "")
-        print(f"  ✓ Deployed to Netlify: {url}")
-    else:
-        print(f"  ✗ Netlify deploy failed: {r.status_code} — {r.text[:200]}")
+def deploy_to_github(html_path):
+    """Commit the updated dashboard HTML and push to GitHub Pages."""
+    import subprocess
+    repo_dir = os.path.dirname(os.path.abspath(html_path))
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+    try:
+        subprocess.run(
+            ["git", "-C", repo_dir, "add", os.path.basename(html_path)],
+            check=True, capture_output=True, text=True,
+        )
+        result = subprocess.run(
+            ["git", "-C", repo_dir, "commit", "-m", f"Dashboard update {ts}"],
+            capture_output=True, text=True,
+        )
+        # exit code 1 = "nothing to commit" — not an error
+        if result.returncode not in (0, 1):
+            raise subprocess.CalledProcessError(result.returncode, "git commit", result.stderr)
+        subprocess.run(
+            ["git", "-C", repo_dir, "push"],
+            check=True, capture_output=True, text=True,
+        )
+        print("  ✓ Deployed to GitHub Pages")
+    except subprocess.CalledProcessError as e:
+        stderr = e.stderr.strip() if e.stderr else str(e)
+        print(f"  ✗ GitHub deploy failed: {stderr}")
 
 
 # ── MAIN ──────────────────────────────────────────────────────────────────────
@@ -883,8 +884,8 @@ def main():
     print("[HTML] Updating dashboard...")
     update_html(HTML_PATH, ds, meta, zp, co, cmp, date_range)
 
-    print("[NETLIFY] Deploying dashboard...")
-    deploy_to_netlify(HTML_PATH)
+    print("[GITHUB] Deploying dashboard...")
+    deploy_to_github(HTML_PATH)
 
     print(f"\n{'='*55}")
     print(f"  Done!  Active users: {meta['aUsers']:,}  |  Legacy: {meta['lUsers']:,}")
