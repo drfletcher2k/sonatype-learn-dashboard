@@ -88,11 +88,18 @@ def get_token():
                 },
                 timeout=30,
             )
-            resp.raise_for_status()
+            if resp.status_code != 200:
+                # Surface Docebo's error body — it says WHY (e.g.
+                # unsupported_grant_type = grant not enabled on the OAuth app,
+                # invalid_client = wrong client id/secret,
+                # invalid_grant = wrong username/password.
+                print(f"  ✗ {grant} grant failed: HTTP {resp.status_code} — {resp.text.strip()[:300]}")
+                continue
             token = resp.json().get("access_token")
             if token:
                 print(f"  ✓ Token obtained (grant: {grant})")
                 return token
+            print(f"  ✗ {grant} grant returned no access_token: {resp.text.strip()[:300]}")
         except Exception as e:
             print(f"  ✗ {grant} grant failed: {e}")
     raise RuntimeError("All authentication methods failed.")
@@ -866,6 +873,11 @@ def main():
             print(f"  ✗ Report download failed: {e}")
             print("  → Falling back to local CSV.")
             use_local = True
+
+    if use_local and not os.path.exists(CSV_PATH):
+        print(f"\n  ✗ Cannot continue: no local CSV fallback found ({CSV_PATH}).")
+        print("    Fix the Docebo credentials/API access and re-run.")
+        sys.exit(1)
 
     print(f"[DATA] Loading {'local' if use_local else 'fresh'} CSV...")
     df = load_and_clean(CSV_PATH)
