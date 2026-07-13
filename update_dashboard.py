@@ -5,8 +5,9 @@ Downloads the Docebo enrollment report, recomputes all metrics,
 and updates both the HTML dashboard and the master CSV.
 
 Usage:
-  python update_dashboard.py            # Pull fresh data from Docebo API
-  python update_dashboard.py --local    # Use existing local CSV (for testing)
+  python update_dashboard.py              # Pull fresh data from Docebo API
+  python update_dashboard.py --local      # Use existing local CSV (for testing)
+  python update_dashboard.py --no-deploy  # Skip git commit/push (CI handles it)
 
 Requirements:
   pip install pandas requests
@@ -24,12 +25,14 @@ import pandas as pd
 from datetime import datetime
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
+# Credentials come from environment variables (GitHub Actions secrets in CI).
+# For local runs: set DOCEBO_CLIENT_SECRET, DOCEBO_USERNAME, DOCEBO_PASSWORD.
 DOMAIN        = "learn.sonatype.com"
-CLIENT_ID     = "sonatype-dashboard-updater"
-CLIENT_SECRET = "b53f53a57a0b1d618dfd67b7b6124d7a892093000da67b1d12bfad96fd94d887"
-API_USERNAME  = "danfletcher221@gmail.com"
-API_PASSWORD  = "Y23L066"
-REPORT_ID     = "619bf79c-970a-4a8e-be8a-dde48a05c652"
+CLIENT_ID     = os.environ.get("DOCEBO_CLIENT_ID", "sonatype-dashboard-updater")
+CLIENT_SECRET = os.environ.get("DOCEBO_CLIENT_SECRET", "")
+API_USERNAME  = os.environ.get("DOCEBO_USERNAME", "")
+API_PASSWORD  = os.environ.get("DOCEBO_PASSWORD", "")
+REPORT_ID     = os.environ.get("DOCEBO_REPORT_ID", "619bf79c-970a-4a8e-be8a-dde48a05c652")
 
 MIGRATION_DATE  = "2024-05-12"   # Platform go-live / bulk-enrollment date
 INTERNAL_DOMAIN = "sonatype.com" # Email domain for internal Sonatype users
@@ -63,6 +66,12 @@ def get_token():
     This is required for the analytics/v1 report export API.
     Falls back to client_credentials if password grant fails.
     """
+    if not CLIENT_SECRET:
+        raise RuntimeError(
+            "DOCEBO_CLIENT_SECRET is not set. Export DOCEBO_CLIENT_SECRET, "
+            "DOCEBO_USERNAME and DOCEBO_PASSWORD (or configure them as "
+            "GitHub Actions secrets) before running."
+        )
     for grant, extra in [
         ("password", {"username": API_USERNAME, "password": API_PASSWORD}),
         ("client_credentials", {}),
@@ -884,8 +893,11 @@ def main():
     print("[HTML] Updating dashboard...")
     update_html(HTML_PATH, ds, meta, zp, co, cmp, date_range)
 
-    print("[GITHUB] Deploying dashboard...")
-    deploy_to_github(HTML_PATH)
+    if "--no-deploy" in sys.argv:
+        print("[GITHUB] Skipping deploy (--no-deploy).")
+    else:
+        print("[GITHUB] Deploying dashboard...")
+        deploy_to_github(HTML_PATH)
 
     print(f"\n{'='*55}")
     print(f"  Done!  Active users: {meta['aUsers']:,}  |  Legacy: {meta['lUsers']:,}")
