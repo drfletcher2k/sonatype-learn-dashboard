@@ -1,0 +1,49 @@
+name: Update dashboard
+
+on:
+  schedule:
+    # Every day at 11:00 UTC (7:00 AM ET)
+    - cron: "0 11 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-dashboard
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install pandas requests
+
+      - name: Refresh dashboard data
+        env:
+          DOCEBO_CLIENT_ID: ${{ secrets.DOCEBO_CLIENT_ID }}
+          DOCEBO_CLIENT_SECRET: ${{ secrets.DOCEBO_CLIENT_SECRET }}
+          DOCEBO_USERNAME: ${{ secrets.DOCEBO_USERNAME }}
+          DOCEBO_PASSWORD: ${{ secrets.DOCEBO_PASSWORD }}
+        run: python update_dashboard.py --no-deploy
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Sonatype_Learn_LMS_Dashboard.html
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Dashboard update $(date -u '+%Y-%m-%d %H:%M') (automated)"
+            git push origin main
+          fi
