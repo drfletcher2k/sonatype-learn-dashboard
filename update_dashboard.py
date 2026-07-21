@@ -796,6 +796,9 @@ def update_html(html_path, ds, meta, zp, co, cmp_data, date_range):
                   f"const CMP = {cmp_js};", html, flags=re.DOTALL)
     html = re.sub(r'<div class="gnav-date">.*?</div>',
                   f'<div class="gnav-date">{date_range}</div>', html)
+    last_updated = datetime.now().strftime("%b %d, %Y")
+    html = re.sub(r'<div class="gnav-updated">.*?</div>',
+                  f'<div class="gnav-updated">Last update: <b>{last_updated}</b></div>', html)
 
     # Ensure iframe-detection override is present (strips 100vh blank space when embedded)
     iframe_snippet = """<style>
